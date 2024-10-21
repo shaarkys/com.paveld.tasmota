@@ -7,7 +7,6 @@
     "setable": true,
     "uiComponent": null,
     "insights": true,
-    "uiQuickAction": true,
     "insightsTitleTrue": {
         "en": "Turned on",
         "nl": "Aangezet",
