@@ -1,7 +1,8 @@
 const fs = require("fs");
 const https = require("https");
+const path = require("path");
 
-const latestTasmotaReleaseFilename = './userdata/tasmota.ver';
+const latestTasmotaReleaseFilename = '/userdata/tasmota.ver';
 
 class TasmotaVersionChecker {
     constructor(app) {
@@ -17,10 +18,16 @@ class TasmotaVersionChecker {
     }
 
     parseVersionString(versionString) {
+        if (typeof versionString !== 'string')
+            return null;
         const match = versionString.match(/^v(?<major>\d+)\.(?<minor>\d+)\.(?<revision>\d+)$/);
         if (match === null)
             return null;
-        return {major: match.groups.major, minor: match.groups.minor, revision: match.groups.revision}
+        return {
+            major: parseInt(match.groups.major, 10),
+            minor: parseInt(match.groups.minor, 10),
+            revision: parseInt(match.groups.revision, 10)
+        }
     }
 
     getAllFiles(dirPath, arrayOfFiles) {
@@ -47,9 +54,14 @@ class TasmotaVersionChecker {
                 }
             }, 2000).catch((error) => {
                 this.app.log(`makeHttpsRequest error: ${error}`);
+                return null;
             });
-            if (result.statusCode !== 200)
-                this.app.error(`Error while checking tasmota releases, staus: ${result.statusCode}`);
+            if (result === null)
+                return null;
+            if (result.statusCode !== 200) {
+                this.app.error(`Error while checking tasmota releases, status: ${result.statusCode}`);
+                return null;
+            }
             const info = JSON.parse(result.body);
             const version = this.parseVersionString(info.tag_name);
             if (version !== null)
@@ -63,6 +75,7 @@ class TasmotaVersionChecker {
 
     saveTasmotaVersion(version) {
         try {
+            fs.mkdirSync(path.dirname(latestTasmotaReleaseFilename), {recursive: true});
             fs.writeFileSync(latestTasmotaReleaseFilename, `v${version.major}.${version.minor}.${version.revision}`, {encoding: 'utf8'});
         } catch (error) {
             this.app.log('Error writing tasmota version file: ' + error);
@@ -91,9 +104,7 @@ class TasmotaVersionChecker {
                     this.app.log(`Latest Tasmota release detected ${newVersion.major}.${newVersion.minor}.${newVersion.revision} (no saved version found)`);
                     saveVersion = true;
                 } else {
-                    let updateAvailable = (this.lastTasmotaVersion.major < newVersion.major) ||
-                        (this.lastTasmotaVersion.major === newVersion.major) && (this.lastTasmotaVersion.minor < newVersion.minor) ||
-                        (this.lastTasmotaVersion.major === newVersion.major) && (this.lastTasmotaVersion.minor === newVersion.minor) && (this.lastTasmotaVersion.revision < newVersion.revision);
+                    let updateAvailable = this.compareVersions(this.lastTasmotaVersion, newVersion) < 0;
                     if (updateAvailable) {
                         await this.tasmotaUpdateTrigger.trigger({
                             new_major: newVersion.major,
@@ -115,6 +126,14 @@ class TasmotaVersionChecker {
         } catch (error) {
             this.app.log(`checkTasmotaReleases: ${error}`);
         }
+    }
+
+    compareVersions(left, right) {
+        if (left.major !== right.major)
+            return left.major - right.major;
+        if (left.minor !== right.minor)
+            return left.minor - right.minor;
+        return left.revision - right.revision;
     }
 
     makeHttpsRequest(options, timeout) {

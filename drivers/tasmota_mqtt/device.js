@@ -43,8 +43,10 @@ class TasmotaDevice extends GeneralTasmotaDevice {
             this.registerMultipleCapabilityListener(this.onOffList, (valueObj, optsObj) => {
                 let capName = Object.keys(valueObj)[0];
                 let value = valueObj[capName] ? 'ON' : 'OFF';
-                let index = capName.slice(-1);
-                this.sockets[parseInt(index) - 1] = value
+                let index = this.getSocketIndexFromCapability(capName);
+                if (index === null)
+                    return Promise.resolve();
+                this.sockets[parseInt(index) - 1] = valueObj[capName]
                 this.sendTasmotaPowerCommand(index, value);
                 return Promise.resolve();
             }, 500);
@@ -155,7 +157,7 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                 //this.log(`windowcoverings_set cap: ${JSON.stringify(value)}`);
                 try {
                     let v = (value * 100);
-                    if (v > 1) v = 1;
+                    if (v > 100) v = 100;
                     if (v < 0) v = 0;
                     this.sendMessage('ShutterPosition', v.toString());
                 } catch (error) {
@@ -173,10 +175,22 @@ class TasmotaDevice extends GeneralTasmotaDevice {
         if ((status === 'TOGGLE') ||
             ((status === 'ON') && !currentVal) ||
             ((status === 'OFF') && currentVal)) {
-            let topic = 'POWER' + socketId;
+            let topic = this.relaysCount === 1 ? 'POWER' : 'POWER' + socketId;
             // this.log(`Sending: ${topic} => ${status}`);
             this.sendMessage(topic, status);
         }
+    }
+
+    getSocketIndexFromCapability(capName) {
+        const match = capName.match(/^switch\.(\d+)$/);
+        return match === null ? null : match[1];
+    }
+
+    getSocketIndexFromPowerTopic(topic) {
+        if (topic === 'POWER')
+            return '1';
+        const match = topic.match(/^POWER(\d+)$/);
+        return match === null ? null : match[1];
     }
 
     calculateOnOffCapabilityValue() {
@@ -197,13 +211,10 @@ class TasmotaDevice extends GeneralTasmotaDevice {
         this.log(`powerReceived: ${topic}  => ${message}`);
         let capName = '';
         let socketIndex = '';
-        if (topic === 'POWER') {
-            capName = 'switch.1';
-            socketIndex = '1';
-        } else {
-            socketIndex = topic.slice(-1);
-            capName = 'switch.' + socketIndex;
-        }
+        socketIndex = this.getSocketIndexFromPowerTopic(topic);
+        if (socketIndex === null)
+            return;
+        capName = 'switch.' + socketIndex;
         let newState = message === 'ON';
         try {
             let intIndex = parseInt(socketIndex) - 1;
@@ -257,11 +268,21 @@ class TasmotaDevice extends GeneralTasmotaDevice {
     async processMqttMessage(topic, message) {
         let topicParts = topic.split('/');
         try {
-            // Check if the message is an object before proceeding
-            if (typeof message !== 'object') {
-                // Log or handle non-object messages like "Online" or "OFF"
-                this.log(`Received non-object message: ${message}`);
-                return;  // Stop further processing for non-object messages
+            if (typeof message !== 'object' || message === null) {
+                if (topicParts[2].startsWith('POWER') && (this.relaysCount > 0)) {
+                    const socketIndex = this.getSocketIndexFromPowerTopic(topicParts[2]);
+                    const capName = socketIndex === null ? null : 'switch.' + socketIndex;
+                    if (capName !== null && this.hasCapability(capName)) {
+                        await this.powerReceived(topicParts[2], message);
+                    }
+                    if ((this.stage !== 'available') && capName !== null && this.hasCapability(capName)) {
+                        this.setDeviceStatus('available');
+                        await this.setAvailable();
+                    }
+                } else if (topicParts[2] !== 'LWT') {
+                    this.log(`Received non-object message: ${message}`);
+                }
+                return;
             }
     
             // Check if the device has the 'measure_signal_strength' capability
