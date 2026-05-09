@@ -36,6 +36,7 @@ class TasmotaDevice extends GeneralTasmotaDevice {
         if (this.additionalSensors) {
             if (!this.hasCapability('additional_sensors'))
                 await this.addCapability('additional_sensors');
+            
         }
         this.onOffList = this.getCapabilities().filter(cap => cap.startsWith('switch.'));
         if (this.onOffList.length > 0) {
@@ -256,19 +257,66 @@ class TasmotaDevice extends GeneralTasmotaDevice {
     async processMqttMessage(topic, message) {
         let topicParts = topic.split('/');
         try {
+            // Check if the message is an object before proceeding
+            if (typeof message !== 'object') {
+                // Log or handle non-object messages like "Online" or "OFF"
+                this.log(`Received non-object message: ${message}`);
+                return;  // Stop further processing for non-object messages
+            }
+    
+            // Check if the device has the 'measure_signal_strength' capability
             if (this.hasCapability('measure_signal_strength')) {
-                let signal = this.getValueByPath(message, ['StatusSTS', 'Wifi', 'RSSI']);
-                if (signal && (typeof signal !== 'object')) {
-                    signal = parseInt(signal)
+                // Determine the correct path to the RSSI value
+                let signalPath = ['Wifi', 'RSSI'];
+                let signalMessage = message;
+                if ('StatusSTS' in message) {
+                    // If 'StatusSTS' exists in the message, adjust the message object
+                    signalMessage = message['StatusSTS'];
+                }
+                // Extract the RSSI value from the message
+                let signal = this.getValueByPath(signalMessage, signalPath);
+                if (signal && typeof signal !== 'object') {
+                    signal = parseInt(signal);
                     if (!isNaN(signal)) {
                         let oldValue = this.getCapabilityValue('measure_signal_strength');
+                        // Update the capability value with the new RSSI (percentage)
                         await this.setCapabilityValue('measure_signal_strength', signal);
-                        if (oldValue !== signal)
+                        if (oldValue !== signal) {
+                            // Trigger a flow card if the signal strength has changed
                             await this.homey.flow.getDeviceTriggerCard('measure_signal_strength_changed')
-                                .trigger(this, {value: signal}, {signal}).catch(this.error);
+                                .trigger(this, { value: signal }, { signal })
+                                .catch(this.error);
+                        }
                     }
                 }
             }
+    
+            // Optionally handle 'measure_rssi' capability
+            if (this.hasCapability('measure_rssi')) {
+                // Determine the correct path to the Signal value
+                let rssiPath = ['Wifi', 'Signal'];
+                let rssiMessage = message;
+                if ('StatusSTS' in message) {
+                    rssiMessage = message['StatusSTS'];
+                }
+                // Extract the Signal value from the message
+                let rssi = this.getValueByPath(rssiMessage, rssiPath);
+                if (rssi && typeof rssi !== 'object') {
+                    rssi = parseInt(rssi);
+                    if (!isNaN(rssi)) {
+                        let oldRssiValue = this.getCapabilityValue('measure_rssi');
+                        // Update the capability value with the new Signal (in dBm)
+                        await this.setCapabilityValue('measure_rssi', rssi);
+                        if (oldRssiValue !== rssi) {
+                            // Trigger a flow card if the RSSI has changed
+                            await this.homey.flow.getDeviceTriggerCard('measure_rssi_changed')
+                                .trigger(this, { value: rssi }, { rssi })
+                                .catch(this.error);
+                        }
+                    }
+                }
+            }
+    
             let messageType = undefined;
             let root_topic = this.swap_prefix_topic ? topicParts[1] : topicParts[0];
             if (root_topic === 'tele') {
@@ -287,7 +335,13 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                 messageType = 'Result';
             if (messageType === undefined)
                 return;
-            if ((messageType === 'Result') || (messageType === 'StatusSTS')) {
+    
+            // Adjust the message object for 'Result' or 'StatusSTS' messages
+            if ((messageType === 'Result' || messageType === 'StatusSTS') && 'StatusSTS' in message) {
+                message = message['StatusSTS'];
+            }
+    
+            if (messageType === 'Result' || messageType === 'StatusSTS') {
                 let isPowerSet = false;
                 for (let valueKey in message) {
                     let value = message[valueKey];
@@ -297,10 +351,10 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                                 try {
                                     if (await this.updateCapabilityValue('fan_speed', value.toString()))
                                         await this.homey.flow.getDeviceTriggerCard('fan_speed_changed')
-                                            .trigger(this, {fan_speed: parseInt(value)}, {value}).catch(this.error);
+                                            .trigger(this, { fan_speed: parseInt(value) }, { value }).catch(this.error);
                                 } catch (error) {
                                     if (this.debug)
-                                        throw(error);
+                                        throw (error);
                                     else
                                         this.log(`Error trying to set fan speed. Error: ${error}`);
                                 }
@@ -313,7 +367,7 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                                     await this.updateCapabilityValue('dim', dimValue);
                                 } catch (error) {
                                     if (this.debug)
-                                        throw(error);
+                                        throw (error);
                                     else
                                         this.log(`Error trying to set dim value. Error: ${error}`);
                                 }
@@ -327,7 +381,7 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                                         await this.updateCapabilityValue('light_mode', 'temperature');
                                 } catch (error) {
                                     if (this.debug)
-                                        throw(error);
+                                        throw (error);
                                     else
                                         this.log(`Error trying to set light temperature value. Error: ${error}`);
                                 }
@@ -336,7 +390,7 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                         case 'HSBColor':
                             if (this.hasLightColor) {
                                 try {
-                                    let values = value.split(',')
+                                    let values = value.split(',');
                                     if (values.length === 3) {
                                         let cCounter = 0;
                                         try {
@@ -345,7 +399,7 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                                                 cCounter++;
                                         } catch (error) {
                                             if (this.debug)
-                                                throw(error);
+                                                throw (error);
                                             else
                                                 this.log('Error trying to set hue value. Error: ' + error);
                                         }
@@ -355,7 +409,7 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                                                 cCounter++;
                                         } catch (error) {
                                             if (this.debug)
-                                                throw(error);
+                                                throw (error);
                                             else
                                                 this.log('Error trying to set saturation value. Error: ' + error);
                                         }
@@ -364,7 +418,7 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                                     }
                                 } catch (error) {
                                     if (this.debug)
-                                        throw(error);
+                                        throw (error);
                                     else
                                         this.log(`Error trying to set light color value. Error: ${error}`);
                                 }
@@ -385,7 +439,7 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                                 if (zbStateVal !== undefined) {
                                     if (await this.updateCapabilityValue('zigbee_pair', zbStateVal)) {
                                         await this.homey.flow.getDeviceTriggerCard('zigbee_pair_changed')
-                                            .trigger(this, {value: zbStateVal}).catch(this.error);
+                                            .trigger(this, { value: zbStateVal }).catch(this.error);
                                     }
                                 }
                             }
@@ -403,6 +457,7 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                     await this.setAvailable();
                 }
             }
+    
             if ((messageType === 'Result') || (messageType === 'StatusSNS')) {
                 Sensor.forEachSensorValue(message, (path, value) => {
                     let capObj = Sensor.getPropertyObjectForSensorField(path, 'wired', true);
@@ -419,7 +474,7 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                                 this.checkSensorCapability(capObj.capability, sensorFieldValue, sensor, sensorField);
                             } catch (error) {
                                 if (this.debug)
-                                    throw(error);
+                                    throw (error);
                                 else
                                     this.log(`While processing ${messageType}.${sensor}.${sensorField} error happened: ${error}`);
                             }
@@ -450,7 +505,7 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                                 }
                             } catch (error) {
                                 if (this.debug)
-                                    throw(error);
+                                    throw (error);
                                 else
                                     this.log(`While processing ${messageType}.${sensor}.${sensorField} error happened: ${error}`);
                             }
@@ -463,13 +518,14 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                 }
             }
         } catch (error) {
+            this.log(`processMqttMessage error: ${error}`);
             if (this.debug)
-                throw(error);
+                throw (error);
             else
-                this.log(`processMqttMessage error: ${error}`);
+            this.log(`processMqttMessage error: ${error}`);
         }
-    }
-
+    } 
+   
     async checkSensorCapability(capName, newValue, sensorName, valueKind) {
         // this.log(`checkSensorCapability: ${sensorName}.${valueKind} => ${newValue}`);
         let oldValue = this.getCapabilityValue(capName);
@@ -483,12 +539,12 @@ class TasmotaDevice extends GeneralTasmotaDevice {
                 this.error('Sensor trigger is not initialized');
                 return false;
             }
-            await this.sensorTrigger.trigger(this, {
-                sensor_name: sensorName,
-                sensor_value_kind: valueKind,
-                sensor_value_new: Number(newValue),
-                sensor_value_old: Number(oldValue)
-            }, {newValue}).catch(this.error);
+                await this.sensorTrigger.trigger(this, {
+                    sensor_name: sensorName,
+                    sensor_value_kind: valueKind,
+                    sensor_value_new: Number(newValue),
+                    sensor_value_old: Number(oldValue)
+                }, { newValue }).catch(this.error);
             return true;
         }
         return false;

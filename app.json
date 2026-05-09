@@ -1765,7 +1765,8 @@
       },
       "getable": true,
       "setable": true,
-      "uiComponent": null
+      "uiComponent": null,
+      "insights": true
     },
     "sensor_counter": {
       "type": "number",
@@ -1794,7 +1795,36 @@
       },
       "getable": true,
       "setable": true,
-      "uiComponent": null
+      "uiComponent": null,
+      "insights": true,
+      "insightsTitleTrue": {
+        "en": "Turned on",
+        "nl": "Aangezet",
+        "de": "Angeschaltet",
+        "fr": "Activé",
+        "it": "Attivato",
+        "sv": "Aktiverad",
+        "no": "Slått på",
+        "es": "Encendido",
+        "da": "Tændt",
+        "ru": "Включено",
+        "pl": "Włączone",
+        "ko": "켜짐"
+      },
+      "insightsTitleFalse": {
+        "en": "Turned off",
+        "nl": "Uitgezet",
+        "de": "Ausgeschaltet",
+        "fr": "Désactivé",
+        "it": "Disattivato",
+        "sv": "Inaktiverad",
+        "no": "Slått av",
+        "es": "Apagado",
+        "da": "Slukket",
+        "ru": "Выключено",
+        "pl": "Wyłączone",
+        "ko": "꺼짐"
+      }
     },
     "switch": {
       "type": "boolean",
@@ -1804,7 +1834,36 @@
       "getable": true,
       "setable": true,
       "uiComponent": "toggle",
-      "uiQuickAction": false
+      "uiQuickAction": false,
+      "insights": true,
+      "insightsTitleTrue": {
+        "en": "Turned on",
+        "nl": "Aangezet",
+        "de": "Angeschaltet",
+        "fr": "Activé",
+        "it": "Attivato",
+        "sv": "Aktiverad",
+        "no": "Slått på",
+        "es": "Encendido",
+        "da": "Tændt",
+        "ru": "Включено",
+        "pl": "Włączone",
+        "ko": "켜짐"
+      },
+      "insightsTitleFalse": {
+        "en": "Turned off",
+        "nl": "Uitgezet",
+        "de": "Ausgeschaltet",
+        "fr": "Désactivé",
+        "it": "Disattivato",
+        "sv": "Inaktiverad",
+        "no": "Slått av",
+        "es": "Apagado",
+        "da": "Slukket",
+        "ru": "Выключено",
+        "pl": "Wyłączone",
+        "ko": "꺼짐"
+      }
     },
     "zigbee_pair": {
       "type": "boolean",
